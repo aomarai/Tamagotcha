@@ -4,9 +4,9 @@
 
 **Goal:** Build a pocketable, battery-powered, V3-style virtual pet on an **original Raspberry Pi Zero v1.3** (BCM2835, single-core ARM11 @1 GHz, 512 MB, **no WiFi/BT**), written in **Python 3**.
 
-**Target hardware baseline (assumed; frozen by ADR-0001 / issue #10):**
-- Display: **Waveshare 2.13" e-Paper HAT** (250×122, SPI, partial 0.3 s / full 2 s) — fallback ST7735 1.8" colour TFT.
-- Power: **Pimoroni LiPo SHIM** *or* **Adafruit PowerBoost 1000C** (soft power button + low-battery cutoff).
+**Proposed hardware baseline (NOT yet frozen — decided by ADR-0001 / issue #10).** Alternatives below stay open until #10 is accepted:
+- Display (choose in #10): **Waveshare 2.13" e-Paper HAT** (250×122, SPI, partial 0.3 s / full 2 s) *or* ST7735 1.8" colour TFT.
+- Power (choose in #10): **Pimoroni LiPo SHIM** (1.5 A boost **with a built-in 3.0 V cutoff** + 3.4 V low-battery flag) *or* **Adafruit PowerBoost 1000C** (**low-battery *signal* only — it does NOT cut the cell off; requires additional cell-protection/cutoff hardware**, see #25). Soft power-button on both.
 - Cell: 18650 Li-ion or LiPo pouch, **2000–2500 mAh**.
 - Time: **DS3231 RTC** (I²C) — required because the base Zero has no network.
 - OS: **Raspberry Pi OS Lite, armhf (32-bit)** — mandatory (ARMv6).
@@ -14,29 +14,28 @@
 **Architecture (hexagonal / ports & adapters):**
 
 ```
-        domain/  (pure Python — no I/O, fully unit-tested)
+        domain/  (pure Python — no I/O, fully unit-tested; Clock lives in ports/)
         ├─ state.py      PetState, Stage, invariants
         ├─ tick.py       advance(state, seconds)  ← offline catch-up
         ├─ actions.py    feed/discipline/clean/sleep
         ├─ evolution.py  care-group → character
         ├─ mortality.py  death / generations / family history
-        ├─ shop.py, games/  content
-        └─ clock.py      (port)
+        └─ shop.py, games/  content
 
-        ports/   Protocol interfaces: Display | Input | Clock | Storage | Battery | Power
+        ports/   Protocol interfaces: Display | Input | Clock | Storage | Battery | Power | Sound
         adapters/  concrete: epd_display | st7735 | gpio_buttons | rtc_ds3231 |
-                   ina219 | lipopi_power | json_storage | dummy_* (tests)
+                   ina219 | lipopi_power | buzzer | json_storage | dummy_* (tests)
         app.py   wiring + main loop     __main__.py
 ```
 
 **Core design rules**
 1. `domain/` never imports `gpiozero`, `RPi.GPIO`, `luma`, `waveshare`, `smbus2`, or does file/network I/O.
 2. The renderer talks only to the `Display` **port**; the board picks the adapter.
-3. Persistence is **atomic** (temp + `fsync` + `os.replace`) and **versioned** (schema migrations).
+3. Persistence is **atomic** (write temp → `fsync` the file → `os.replace` → **`fsync` the containing directory**) and **versioned** (schema migrations).
 4. Time always comes from a `Clock` port; on boot, **elapsed-time catch-up** makes the pet feel alive.
 5. Everything must run headless in CI using fakes (`DummyDisplay`, `FakeButtons`, `FakeClock`).
 
-**Runtime budget (modelled, 85 % boost efficiency) — validated by issue #38:**
+**Runtime budget (modelled, 85 % boost efficiency, on FULL nameplate capacity — de-rate ~75–85 % for the 3.0 V cutoff). NOT measured; to be validated by #38:**
 
 | Battery | idle (82 mA) | app (~140 mA) | heavy (220 mA) |
 |---|---|---|---|
@@ -86,7 +85,7 @@
 **Verify:** snapshot tests through `DummyDisplay`; navigation tests with synthetic button events.
 
 ## Phase 3 — Hardware integration
-- **#21** GPIO buttons · **#22** buzzer · **#23** DS3231 RTC · **#24** battery monitor · **#25** soft power button + graceful low-battery shutdown.
+- **#21** GPIO buttons · **#22** buzzer (via the `Sound` port) · **#23** DS3231 RTC · **#24** battery monitor · **#25** soft power button + graceful low-battery shutdown.
 - **#26** Real display bring-up on the target.
 
 **Verify:** bench checklist per issue; `tamagotcha.selftest` (see #37).
@@ -119,9 +118,9 @@ pyproject.toml, uv.lock, .pre-commit-config.yaml, CONTRIBUTING.md
 src/tamagotcha/{__init__,__main__,app,selftest}.py
 src/tamagotcha/domain/{state,tick,actions,evolution,mortality,shop,clock}.py
 src/tamagotcha/domain/games/{get,sprint,bump,flag,heading,memory}.py
-src/tamagotcha/ports/{display,input,clock,storage,battery,power}.py
+src/tamagotcha/ports/{display,input,clock,storage,battery,power,sound}.py
 src/tamagotcha/adapters/{epd_display,st7735_display,gpio_buttons,rtc_ds3231,
-                        ina219,lipopi_power,json_storage,dummy_display}.py
+                        ina219,lipopi_power,buzzer,json_storage,dummy_display}.py
 src/tamagotcha/render/{screens,hud}.py
 data/{v3_growth.yaml,items.yaml}
 assets/sprites/**, tools/pack_sprites.py
