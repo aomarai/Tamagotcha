@@ -116,7 +116,7 @@
 pyproject.toml, uv.lock, .pre-commit-config.yaml, CONTRIBUTING.md
 .github/workflows/ci.yml
 src/tamagotcha/{__init__,__main__,app,selftest}.py
-src/tamagotcha/domain/{state,tick,actions,evolution,mortality,shop,clock}.py
+src/tamagotcha/domain/{state,tick,actions,evolution,mortality,shop}.py
 src/tamagotcha/domain/games/{get,sprint,bump,flag,heading,memory}.py
 src/tamagotcha/ports/{display,input,clock,storage,battery,power,sound}.py
 src/tamagotcha/adapters/{epd_display,st7735_display,gpio_buttons,rtc_ds3231,
